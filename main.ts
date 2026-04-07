@@ -40,9 +40,8 @@ if (import.meta.main) {
 
   // 개발 환경(deno run)과 컴파일 바이너리 환경 모두 지원
   const execName = basename(Deno.execPath());
-  const binaryDir = execName.startsWith("deno")
-    ? import.meta.dirname!
-    : dirname(Deno.execPath());
+  const isScript = execName.startsWith("deno");
+  const binaryDir = isScript ? import.meta.dirname! : dirname(Deno.execPath());
 
   // Neutralinojs에 전달하는 경로는 forward slash로 정규화 (Windows 역슬래시 대응)
   const toFwdSlash = (p: string) => p.replace(/\\/g, "/");
@@ -87,7 +86,9 @@ if (import.meta.main) {
     JSON.stringify(config, null, 2),
   );
 
-  const proc = new Deno.Command(neutralinoBin, {
+  const TIMEOUT_MS = 60_000;
+
+  const child = new Deno.Command(neutralinoBin, {
     args: [`--path=${resourcesDir}`],
     env: {
       ...Deno.env.toObject(),
@@ -95,11 +96,17 @@ if (import.meta.main) {
       OUTPUT_PATH: toFwdSlash(actualOutputPath),
     },
     cwd: binaryDir,
-    stdout: "null",
-    stderr: "null",
-  });
+    stdout: isScript ? "inherit" : "null",
+    stderr: isScript ? "inherit" : "null",
+  }).spawn();
 
-  const { code } = await proc.output();
+  const timer = setTimeout(() => {
+    console.error(`markup-img: timeout after ${TIMEOUT_MS / 1000}s, killing process`);
+    child.kill();
+  }, TIMEOUT_MS);
+
+  const { code } = await child.status;
+  clearTimeout(timer);
 
   if (toStdout) {
     if (code === 0) {

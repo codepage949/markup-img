@@ -68,12 +68,13 @@
 
           const { snapdom } = await import("./snapdom.mjs");
 
-          const result = await snapdom(target, { scale: 1 });
+          const result = await snapdom(target, { scale: 1 / window.devicePixelRatio });
           const canvas = await result.toCanvas();
 
           const isJpeg = outputPath.endsWith(".jpg") || outputPath.endsWith(".jpeg");
           const imgType = isJpeg ? "image/jpeg" : "image/png";
           const blob = await new Promise((resolve) => canvas.toBlob(resolve, imgType));
+          if (!blob) throw new Error(`canvas.toBlob failed (canvas may be too large: ${canvas.width}x${canvas.height})`);
           const buffer = await blob.arrayBuffer();
 
           await Neutralino.filesystem.writeBinaryFile(outputPath, buffer);
