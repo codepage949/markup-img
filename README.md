@@ -101,8 +101,3 @@ deno task test
 # 실행 파일 컴파일
 deno task compile
 ```
-
----
-
-## 📝 특이 사항
-- **최초 실행**: 운영체제에 맞는 Neutralinojs 바이너리가 없을 경우 GitHub에서 자동으로 다운로드합니다. (네트워크 연결 필요)
