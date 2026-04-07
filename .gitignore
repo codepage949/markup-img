@@ -7,5 +7,6 @@ markup-img
 # 런타임에 자동 생성되는 파일
 resources/neutralino.config.json
 neutralinojs.log
+neutralino-*
 
 !.gitignore

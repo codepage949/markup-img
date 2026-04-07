@@ -1,4 +1,4 @@
-import { dirname, basename, resolve } from "jsr:@std/path";
+import { dirname, basename, resolve } from "@std/path";
 
 const NEUTRALINO_VERSION = "6.7.0";
 
