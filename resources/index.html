@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>markup-img</title>
+    <script src="neutralino.js"></script>
+    <script src="js_in_html.js"></script>
+    <style>
+      * { margin: 0; padding: 0; }
+      body { overflow: hidden; }
+      iframe { position: fixed; top: 0; left: 0; width: 100%; height: 100%; border: none; }
+    </style>
+  </head>
+  <body>
+    <script>
+      Neutralino.init();
+
+      Neutralino.events.on("ready", async () => {
+        try {
+          const htmlPath = await Neutralino.os.getEnv("HTML_PATH");
+          const outputPath =
+            (await Neutralino.os.getEnv("OUTPUT_PATH")) || "result.png";
+
+          if (!htmlPath) {
+            console.error("HTML_PATH is not set");
+            await Neutralino.app.exit(1);
+            return;
+          }
+
+          const port = window.NL_PORT;
+          const htmlDir = htmlPath.substring(0, htmlPath.lastIndexOf("/"));
+          const htmlFile = htmlPath.substring(htmlPath.lastIndexOf("/") + 1);
+
+          // 사용자 HTML 디렉토리를 /html/ URL 경로에 마운트
+          await Neutralino.server.mount("/html/", htmlDir);
+
+          // iframe에 마운트된 URL로 사용자 HTML 로드 (parent와 동일 origin)
+          const iframe = document.createElement("iframe");
+          document.body.appendChild(iframe);
+          iframe.src = `http://127.0.0.1:${port}/html/${htmlFile}`;
+
+          await new Promise((resolve) =>
+            iframe.addEventListener("load", resolve, { once: true }),
+          );
+
+          const doc = iframe.contentDocument;
+
+          // html2canvas가 document clone 시 상대경로를 잘못 resolve하는 문제 해결:
+          // 모든 이미지의 src를 절대 URL로 교체 (img.src는 항상 절대 URL 반환)
+          for (const img of doc.querySelectorAll("img[src]")) {
+            img.setAttribute("src", img.src);
+          }
+          // CSS background-image의 경우 style 속성을 절대 URL로 교체
+          for (const el of doc.querySelectorAll("[style*='url(']")) {
+            el.style.cssText = el.style.cssText.replace(
+              /url\(['"]?(?!https?:|data:)([^'")]+)['"]?\)/g,
+              (match, relPath) => {
+                const abs = new URL(relPath, `http://127.0.0.1:${port}/html/`).href;
+                return `url('${abs}')`;
+              },
+            );
+          }
+
+          // 이미지/폰트 로딩 대기
+          await new Promise((resolve) => setTimeout(resolve, 500));
+
+          // 캡처 대상: #markup-img 우선, 없으면 body
+          const target = doc.querySelector("#markup-img") || doc.body;
+
+          const canvas = await html2canvas(target, { scale: 1 });
+
+          const imgType =
+            outputPath.endsWith(".jpg") || outputPath.endsWith(".jpeg")
+              ? "image/jpeg"
+              : "image/png";
+
+          const blob = await new Promise((resolve) =>
+            canvas.toBlob(resolve, imgType),
+          );
+          const buffer = await blob.arrayBuffer();
+
+          await Neutralino.filesystem.writeBinaryFile(outputPath, buffer);
+          await Neutralino.app.exit(0);
+        } catch (e) {
+          console.error("markup-img error:", e?.message || String(e), e?.stack || "");
+          await Neutralino.app.exit(1);
+        }
+      });
+    </script>
+  </body>
+</html>
