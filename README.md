@@ -22,6 +22,7 @@ markup-img-linux/
 - `html-path`: 변환할 HTML 파일 경로 (필수)
 - `output-path`: 출력 이미지 경로 (선택, 기본값: `result.png`)
   - `.jpg` / `.jpeg` 확장자 사용 시 JPEG로 저장
+  - `-`, `-.png`, `-.jpg` 사용 시 stdout으로 출력
 
 ## 예제
 
@@ -29,6 +30,10 @@ markup-img-linux/
 ./markup-img page.html
 ./markup-img page.html output.png
 ./markup-img page.html output.jpg
+
+# stdout 출력 (파이프 활용)
+./markup-img page.html - > result.png
+./markup-img page.html -.jpg | convert - output.webp
 ```
 
 ## HTML 작성 방법

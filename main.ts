@@ -15,6 +15,14 @@ export function getNeutralinoBinaryName(os: string, arch: string): string {
   throw new Error(`Unsupported platform: ${os} / ${arch}`);
 }
 
+export function isStdoutPath(p: string): boolean {
+  return p === "-" || p === "-.png" || p === "-.jpg" || p === "-.jpeg";
+}
+
+export function getStdoutFormat(p: string): "png" | "jpg" {
+  return p.endsWith(".jpg") || p.endsWith(".jpeg") ? "jpg" : "png";
+}
+
 async function ensureNeutralinoBinary(binPath: string): Promise<void> {
   try {
     await Deno.stat(binPath);
@@ -71,7 +79,10 @@ if (import.meta.main) {
   }
 
   const absHtmlPath = resolve(htmlPath);
-  const absOutputPath = resolve(outputPath);
+  const toStdout = isStdoutPath(outputPath);
+  const actualOutputPath = toStdout
+    ? await Deno.makeTempFile({ suffix: `.${getStdoutFormat(outputPath)}` })
+    : resolve(outputPath);
 
   // 개발 환경(deno run)과 컴파일 바이너리 환경 모두 지원
   const execName = basename(Deno.execPath());
@@ -126,7 +137,7 @@ if (import.meta.main) {
     env: {
       ...Deno.env.toObject(),
       HTML_PATH: absHtmlPath,
-      OUTPUT_PATH: absOutputPath,
+      OUTPUT_PATH: actualOutputPath,
     },
     cwd: binaryDir,
     stdout: "null",
@@ -134,5 +145,14 @@ if (import.meta.main) {
   });
 
   const { code } = await proc.output();
+
+  if (toStdout) {
+    if (code === 0) {
+      const data = await Deno.readFile(actualOutputPath);
+      await Deno.stdout.write(data);
+    }
+    await Deno.remove(actualOutputPath).catch(() => {});
+  }
+
   Deno.exit(code);
 }
