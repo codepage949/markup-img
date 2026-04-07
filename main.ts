@@ -23,52 +23,6 @@ export function getStdoutFormat(p: string): "png" | "jpg" {
   return p.endsWith(".jpg") || p.endsWith(".jpeg") ? "jpg" : "png";
 }
 
-async function ensureNeutralinoBinary(binPath: string): Promise<void> {
-  try {
-    await Deno.stat(binPath);
-    return;
-  } catch {
-    // 바이너리 없음, 다운로드 진행
-  }
-
-  const binName = basename(binPath);
-  const zipUrl = `https://github.com/neutralinojs/neutralinojs/releases/download/v${NEUTRALINO_VERSION}/neutralinojs-v${NEUTRALINO_VERSION}.zip`;
-
-  console.error(`Neutralinojs binary not found. Downloading v${NEUTRALINO_VERSION}...`);
-
-  const response = await fetch(zipUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download Neutralinojs: HTTP ${response.status}`);
-  }
-
-  const tempZip = await Deno.makeTempFile({ suffix: ".zip" });
-  try {
-    await Deno.writeFile(tempZip, new Uint8Array(await response.arrayBuffer()));
-
-    const destDir = dirname(binPath);
-
-    if (Deno.build.os === "windows") {
-      const { code } = await new Deno.Command("powershell", {
-        args: [
-          "-Command",
-          `Add-Type -Assembly System.IO.Compression.FileSystem; [IO.Compression.ZipFile]::ExtractToDirectory('${tempZip}', '${destDir}')`,
-        ],
-      }).output();
-      if (code !== 0) throw new Error("Failed to extract zip on Windows");
-    } else {
-      const { code } = await new Deno.Command("unzip", {
-        args: ["-o", tempZip, binName, "-d", destDir],
-      }).output();
-      if (code !== 0) throw new Error("Failed to extract zip");
-      await Deno.chmod(binPath, 0o755);
-    }
-
-    console.error("Download complete.");
-  } finally {
-    await Deno.remove(tempZip).catch(() => {});
-  }
-}
-
 if (import.meta.main) {
   const htmlPath = Deno.args[0];
   const outputPath = Deno.args[1] ?? "result.png";
@@ -132,8 +86,6 @@ if (import.meta.main) {
     `${resourcesDir}/neutralino.config.json`,
     JSON.stringify(config, null, 2),
   );
-
-  await ensureNeutralinoBinary(neutralinoBin);
 
   const proc = new Deno.Command(neutralinoBin, {
     args: [`--path=${resourcesDir}`],

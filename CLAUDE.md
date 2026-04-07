@@ -31,3 +31,9 @@
 - html2canvas + iframe: 캡처 전 `img.setAttribute("src", img.src)` 로 절대 URL 교체
 - Neutralinojs 서버 주소: `127.0.0.1`, `localhost` 아님
 - Neutralinojs JS API 확인: `resources/neutralino.js` 소스에서 함수 시그니처 직접 확인
+
+### 2026-04-07 Neutralino 바이너리 다운로드 스크립트 분리
+
+#### 다음에 기억할 것
+
+- 패키지는 인라인(`npm:fflate@0.8.2`)으로 지정하지 말고 `deno.json`의 `imports`에 등록 후 이름으로 import
