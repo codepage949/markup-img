@@ -23,6 +23,13 @@ export function getStdoutFormat(p: string): "png" | "jpg" {
   return p.endsWith(".jpg") || p.endsWith(".jpeg") ? "jpg" : "png";
 }
 
+export function getNeutralinoLaunchArgs(resourcesDir: string): string[] {
+  return [
+    "--res-mode=directory",
+    `--path=${resourcesDir}`,
+  ];
+}
+
 if (import.meta.main) {
   const htmlPath = Deno.args[0];
   const outputPath = Deno.args[1] ?? "result.png";
@@ -89,7 +96,7 @@ if (import.meta.main) {
   const TIMEOUT_MS = 60_000;
 
   const child = new Deno.Command(neutralinoBin, {
-    args: [`--path=${resourcesDir}`],
+    args: getNeutralinoLaunchArgs(resourcesDir),
     env: {
       ...Deno.env.toObject(),
       HTML_PATH: toFwdSlash(absHtmlPath),

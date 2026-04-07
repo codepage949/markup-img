@@ -1,5 +1,10 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert";
-import { getNeutralinoBinaryName, isStdoutPath, getStdoutFormat } from "./main.ts";
+import {
+  getNeutralinoBinaryName,
+  getNeutralinoLaunchArgs,
+  isStdoutPath,
+  getStdoutFormat,
+} from "./main.ts";
 
 Deno.test("플랫폼별 바이너리 이름 반환", async (t) => {
   await t.step("linux x86_64 → neutralino-linux_x64", () => {
@@ -66,5 +71,21 @@ Deno.test("stdout 포맷 감지", async (t) => {
 
   await t.step("'-.jpeg'는 jpg", () => {
     assertEquals(getStdoutFormat("-.jpeg"), "jpg");
+  });
+});
+
+Deno.test("Neutralino 실행 인자 생성", async (t) => {
+  await t.step("디렉터리 리소스 모드를 명시한다", () => {
+    assertEquals(
+      getNeutralinoLaunchArgs("/tmp/resources"),
+      ["--res-mode=directory", "--path=/tmp/resources"],
+    );
+  });
+
+  await t.step("윈도우 스타일 경로도 그대로 path 인자로 포함한다", () => {
+    assertEquals(
+      getNeutralinoLaunchArgs("C:/work/resources"),
+      ["--res-mode=directory", "--path=C:/work/resources"],
+    );
   });
 });

@@ -14,7 +14,7 @@
 
 - 🚀 **초경량**: Electron 대비 압도적으로 작은 용량 (Neutralinojs 기반)
 - 🎯 **정밀 렌더링**: `SnapDOM` (SVG foreignObject) 기반의 정확한 DOM 캡처
-- 🌍 **멀티 플랫폼**: Windows, macOS, Linux 자동 지원 (바이너리 자동 다운로드)
+- 🌍 **멀티 플랫폼**: Windows, macOS, Linux 지원
 - 🛠️ **파이프라인 친화적**: `stdout` 출력을 지원하여 다른 CLI 도구와 연동 가능
 - 📦 **단일 바이너리**: 복잡한 의존성 설치 없이 즉시 실행
 
@@ -82,7 +82,7 @@
 ├── resources/         # 렌더러 리소스
 │   ├── index.html     # 캡처 로직 (WebView)
 │   └── snapdom.mjs    # SnapDOM 엔진
-└── neutralino-*       # 플랫폼별 런타임 (실행 시 자동 다운로드)
+└── neutralino-*       # 플랫폼별 런타임
 ```
 
 ---
@@ -92,6 +92,9 @@
 Deno가 설치되어 있어야 합니다.
 
 ```bash
+# Neutralinojs 런타임 다운로드
+deno task download
+
 # 개발 모드 실행
 deno task start <html-path> [output-path]
 
