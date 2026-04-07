@@ -4,7 +4,6 @@
     <meta charset="UTF-8" />
     <title>markup-img</title>
     <script src="neutralino.js"></script>
-    <script src="js_in_html.js"></script>
     <style>
       * { margin: 0; padding: 0; }
       body { overflow: hidden; }
@@ -45,7 +44,7 @@
 
           const doc = iframe.contentDocument;
 
-          // html2canvas가 document clone 시 상대경로를 잘못 resolve하는 문제 해결:
+          // SnapDOM이 리소스를 fetch할 때 상대경로 오해석 방지:
           // 모든 이미지의 src를 절대 URL로 교체 (img.src는 항상 절대 URL 반환)
           for (const img of doc.querySelectorAll("img[src]")) {
             img.setAttribute("src", img.src);
@@ -67,16 +66,14 @@
           // 캡처 대상: #markup-img 우선, 없으면 body
           const target = doc.querySelector("#markup-img") || doc.body;
 
-          const canvas = await html2canvas(target, { scale: 1 });
+          const { snapdom } = await import("./snapdom.mjs");
 
-          const imgType =
-            outputPath.endsWith(".jpg") || outputPath.endsWith(".jpeg")
-              ? "image/jpeg"
-              : "image/png";
+          const result = await snapdom(target, { scale: 1 });
+          const canvas = await result.toCanvas();
 
-          const blob = await new Promise((resolve) =>
-            canvas.toBlob(resolve, imgType),
-          );
+          const isJpeg = outputPath.endsWith(".jpg") || outputPath.endsWith(".jpeg");
+          const imgType = isJpeg ? "image/jpeg" : "image/png";
+          const blob = await new Promise((resolve) => canvas.toBlob(resolve, imgType));
           const buffer = await blob.arrayBuffer();
 
           await Neutralino.filesystem.writeBinaryFile(outputPath, buffer);
