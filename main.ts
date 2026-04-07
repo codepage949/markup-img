@@ -90,7 +90,10 @@ if (import.meta.main) {
     ? import.meta.dirname!
     : dirname(Deno.execPath());
 
-  const resourcesDir = `${binaryDir}/resources`;
+  // Neutralinojs에 전달하는 경로는 forward slash로 정규화 (Windows 역슬래시 대응)
+  const toFwdSlash = (p: string) => p.replace(/\\/g, "/");
+
+  const resourcesDir = toFwdSlash(`${binaryDir}/resources`);
   const binName = getNeutralinoBinaryName(Deno.build.os, Deno.build.arch);
   const neutralinoBin = `${binaryDir}/${binName}`;
 
@@ -136,8 +139,8 @@ if (import.meta.main) {
     args: [`--path=${resourcesDir}`],
     env: {
       ...Deno.env.toObject(),
-      HTML_PATH: absHtmlPath,
-      OUTPUT_PATH: actualOutputPath,
+      HTML_PATH: toFwdSlash(absHtmlPath),
+      OUTPUT_PATH: toFwdSlash(actualOutputPath),
     },
     cwd: binaryDir,
     stdout: "null",
