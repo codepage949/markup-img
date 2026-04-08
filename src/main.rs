@@ -1,8 +1,8 @@
 use markup_img::{
     find_runtime_root, get_help_text, get_missing_xvfb_message, get_neutralino_binary_name,
-    get_neutralino_launch_args, get_stdout_format, get_xvfb_launch_args, html_temp_suffix, is_help_flag,
-    is_stdin_path, is_stdout_path, parse_display_number, resolve_output_path, should_use_xvfb,
-    temp_html_prefix, to_forward_slashes,
+    get_neutralino_launch_args, get_stdout_format, get_xvfb_launch_args, html_temp_suffix,
+    is_help_flag, is_stdin_path, is_stdout_path, parse_display_number, resolve_output_path,
+    should_use_xvfb, temp_html_prefix, to_forward_slashes,
 };
 use std::env;
 use std::fs::{self, File};
@@ -20,9 +20,26 @@ struct HtmlInput {
     temporary: bool,
 }
 
+struct OutputTarget {
+    path: PathBuf,
+    to_stdout: bool,
+}
+
+struct RuntimePaths {
+    runtime_root: PathBuf,
+    resources_dir: PathBuf,
+    neutralino_bin: PathBuf,
+}
+
 struct XvfbSession {
     display: String,
     child: Child,
+}
+
+struct LaunchContext {
+    envs: Vec<(String, String)>,
+    inherit_child_stdio: bool,
+    _xvfb: Option<XvfbSession>,
 }
 
 fn create_html_input_file(html_path: &str) -> Result<HtmlInput, Box<dyn std::error::Error>> {
@@ -45,6 +62,14 @@ fn create_html_input_file(html_path: &str) -> Result<HtmlInput, Box<dyn std::err
     })
 }
 
+impl Drop for HtmlInput {
+    fn drop(&mut self) {
+        if self.temporary {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
 fn create_stdin_temp_path() -> io::Result<PathBuf> {
     match Builder::new()
         .prefix(temp_html_prefix())
@@ -61,13 +86,19 @@ fn create_stdin_temp_path() -> io::Result<PathBuf> {
     }
 }
 
-fn create_output_path(output_path: &str) -> io::Result<(PathBuf, bool)> {
+fn create_output_target(output_path: &str) -> io::Result<OutputTarget> {
     if is_stdout_path(output_path) {
         let suffix = format!(".{}", get_stdout_format(output_path));
         let path = Builder::new().suffix(&suffix).tempfile()?.keep()?.1;
-        Ok((path, true))
+        Ok(OutputTarget {
+            path,
+            to_stdout: true,
+        })
     } else {
-        Ok((resolve_output_path(&env::current_dir()?, output_path), false))
+        Ok(OutputTarget {
+            path: resolve_output_path(&env::current_dir()?, output_path),
+            to_stdout: false,
+        })
     }
 }
 
@@ -117,6 +148,13 @@ fn start_xvfb_for_headless(
     Ok(XvfbSession { display, child })
 }
 
+impl Drop for XvfbSession {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
 fn wait_with_timeout(child: &mut Child, timeout: Duration) -> io::Result<i32> {
     let start = Instant::now();
     loop {
@@ -151,6 +189,65 @@ fn build_env_pairs() -> Vec<(String, String)> {
     env::vars().collect()
 }
 
+fn resolve_runtime_paths() -> Result<RuntimePaths, Box<dyn std::error::Error>> {
+    let runtime_root = find_runtime_root()?;
+    let resources_dir = runtime_root.join("resources");
+    let bin_name = get_neutralino_binary_name(env::consts::OS, env::consts::ARCH)?;
+    let neutralino_bin = runtime_root.join(bin_name);
+
+    Ok(RuntimePaths {
+        runtime_root,
+        resources_dir,
+        neutralino_bin,
+    })
+}
+
+fn prepare_launch_context() -> Result<LaunchContext, Box<dyn std::error::Error>> {
+    let inherit_child_stdio = should_inherit_child_stdio();
+    let mut envs = build_env_pairs();
+    let mut xvfb = None;
+
+    if should_use_xvfb(env::consts::OS, env::var("DISPLAY").ok().as_deref()) {
+        let session = start_xvfb_for_headless(&envs, inherit_child_stdio)?;
+        envs.push(("DISPLAY".to_string(), session.display.clone()));
+        xvfb = Some(session);
+    }
+
+    Ok(LaunchContext {
+        envs,
+        inherit_child_stdio,
+        _xvfb: xvfb,
+    })
+}
+
+fn build_neutralino_command(
+    paths: &RuntimePaths,
+    launch_context: &LaunchContext,
+    html_input: &HtmlInput,
+    output_target: &OutputTarget,
+) -> Command {
+    let mut child_command = Command::new(&paths.neutralino_bin);
+    child_command.args(get_neutralino_launch_args(&to_forward_slashes(
+        &paths.resources_dir,
+    )));
+    child_command.current_dir(&paths.runtime_root);
+    child_command.env_clear();
+    for (key, value) in &launch_context.envs {
+        child_command.env(key, value);
+    }
+    child_command.env("HTML_PATH", to_forward_slashes(&html_input.path));
+    child_command.env("OUTPUT_PATH", to_forward_slashes(&output_target.path));
+    if launch_context.inherit_child_stdio {
+        child_command.stdout(Stdio::inherit());
+        child_command.stderr(Stdio::inherit());
+    } else {
+        child_command.stdout(Stdio::null());
+        child_command.stderr(Stdio::null());
+    }
+
+    child_command
+}
+
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let args = env::args().skip(1).collect::<Vec<_>>();
     let html_path = args.first().map(String::as_str);
@@ -170,57 +267,20 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 
     let output_path = args.get(1).map(String::as_str).unwrap_or("result.png");
     let html_input = create_html_input_file(html_path)?;
-    let (actual_output_path, to_stdout) = create_output_path(output_path)?;
+    let output_target = create_output_target(output_path)?;
+    let runtime_paths = resolve_runtime_paths()?;
+    let launch_context = prepare_launch_context()?;
 
-    let runtime_root = find_runtime_root()?;
-    let resources_dir = runtime_root.join("resources");
-    let bin_name = get_neutralino_binary_name(env::consts::OS, env::consts::ARCH)?;
-    let neutralino_bin = runtime_root.join(bin_name);
-    let inherit_child_stdio = should_inherit_child_stdio();
-
-    let mut envs = build_env_pairs();
-    let mut xvfb = None;
-    if should_use_xvfb(env::consts::OS, env::var("DISPLAY").ok().as_deref()) {
-        let session = start_xvfb_for_headless(&envs, inherit_child_stdio)?;
-        envs.push(("DISPLAY".to_string(), session.display.clone()));
-        xvfb = Some(session);
-    }
-
-    let mut child_command = Command::new(&neutralino_bin);
-    child_command.args(get_neutralino_launch_args(&to_forward_slashes(
-        &resources_dir,
-    )));
-    child_command.current_dir(&runtime_root);
-    child_command.env_clear();
-    for (key, value) in &envs {
-        child_command.env(key, value);
-    }
-    child_command.env("HTML_PATH", to_forward_slashes(&html_input.path));
-    child_command.env("OUTPUT_PATH", to_forward_slashes(&actual_output_path));
-    if inherit_child_stdio {
-        child_command.stdout(Stdio::inherit());
-        child_command.stderr(Stdio::inherit());
-    } else {
-        child_command.stdout(Stdio::null());
-        child_command.stderr(Stdio::null());
-    }
-
+    let mut child_command =
+        build_neutralino_command(&runtime_paths, &launch_context, &html_input, &output_target);
     let mut child = child_command.spawn()?;
     let code = wait_with_timeout(&mut child, Duration::from_millis(TIMEOUT_MS))?;
 
-    if let Some(mut xvfb) = xvfb {
-        let _ = xvfb.child.kill();
-        let _ = xvfb.child.wait();
-    }
-    if html_input.temporary {
-        let _ = fs::remove_file(&html_input.path);
-    }
-
-    if to_stdout {
+    if output_target.to_stdout {
         if code == 0 {
-            write_stdout_image(&actual_output_path)?;
+            write_stdout_image(&output_target.path)?;
         }
-        let _ = fs::remove_file(&actual_output_path);
+        let _ = fs::remove_file(&output_target.path);
     }
 
     Ok(code)
