@@ -1,6 +1,7 @@
 import { dirname, basename, resolve } from "@std/path";
 
 const NEUTRALINO_VERSION = "6.7.0";
+const XVFB_SCREEN = "1920x1080x24";
 
 export function getNeutralinoBinaryName(os: string, arch: string): string {
   if (os === "linux") {
@@ -28,6 +29,89 @@ export function getNeutralinoLaunchArgs(resourcesDir: string): string[] {
     "--res-mode=directory",
     `--path=${resourcesDir}`,
   ];
+}
+
+export function shouldUseXvfb(os: string, display: string | undefined): boolean {
+  return os === "linux" && !display;
+}
+
+export function getXvfbLaunchArgs(): string[] {
+  return [
+    "-displayfd",
+    "1",
+    "-screen",
+    "0",
+    XVFB_SCREEN,
+    "-nolisten",
+    "tcp",
+  ];
+}
+
+export function parseDisplayNumber(output: string): string | null {
+  const match = output.match(/^\s*(\d+)\s*$/m);
+  return match ? `:${match[1]}` : null;
+}
+
+export function getMissingXvfbMessage(): string {
+  return "Headless Linux requires Xvfb, but 'Xvfb' was not found in PATH. Install Xvfb or run inside a desktop session.";
+}
+
+async function readXvfbDisplay(stdout: ReadableStream<Uint8Array> | null): Promise<string> {
+  if (!stdout) {
+    throw new Error("Failed to read Xvfb display number");
+  }
+
+  const reader = stdout.getReader();
+  const decoder = new TextDecoder();
+  let output = "";
+
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      output += decoder.decode(value, { stream: true });
+      const display = parseDisplayNumber(output);
+      if (display) {
+        await reader.cancel();
+        return display;
+      }
+    }
+    output += decoder.decode();
+  } finally {
+    reader.releaseLock();
+  }
+
+  throw new Error(`Failed to parse Xvfb display number: ${output.trim()}`);
+}
+
+async function startXvfbForHeadless(
+  env: Record<string, string>,
+  isScript: boolean,
+): Promise<{ display: string; child: Deno.ChildProcess }> {
+  let xvfbChild: Deno.ChildProcess;
+
+  try {
+    xvfbChild = new Deno.Command("Xvfb", {
+      args: getXvfbLaunchArgs(),
+      env,
+      stdout: "piped",
+      stderr: isScript ? "inherit" : "null",
+    }).spawn();
+  } catch (error) {
+    if (error instanceof Deno.errors.NotFound) {
+      throw new Error(getMissingXvfbMessage());
+    }
+    throw error;
+  }
+
+  try {
+    const display = await readXvfbDisplay(xvfbChild.stdout);
+    return { display, child: xvfbChild };
+  } catch (error) {
+    xvfbChild.kill("SIGTERM");
+    await xvfbChild.status.catch(() => {});
+    throw error;
+  }
 }
 
 if (import.meta.main) {
@@ -94,11 +178,18 @@ if (import.meta.main) {
   );
 
   const TIMEOUT_MS = 60_000;
+  const env = Deno.env.toObject();
+  let xvfb: { display: string; child: Deno.ChildProcess } | null = null;
+
+  if (shouldUseXvfb(Deno.build.os, env.DISPLAY)) {
+    xvfb = await startXvfbForHeadless(env, isScript);
+    env.DISPLAY = xvfb.display;
+  }
 
   const child = new Deno.Command(neutralinoBin, {
     args: getNeutralinoLaunchArgs(resourcesDir),
     env: {
-      ...Deno.env.toObject(),
+      ...env,
       HTML_PATH: toFwdSlash(absHtmlPath),
       OUTPUT_PATH: toFwdSlash(actualOutputPath),
     },
@@ -107,13 +198,25 @@ if (import.meta.main) {
     stderr: isScript ? "inherit" : "null",
   }).spawn();
 
-  const timer = setTimeout(() => {
-    console.error(`markup-img: timeout after ${TIMEOUT_MS / 1000}s, killing process`);
-    child.kill();
-  }, TIMEOUT_MS);
+  let code: number;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const { code } = await child.status;
-  clearTimeout(timer);
+  try {
+    timer = setTimeout(() => {
+      console.error(`markup-img: timeout after ${TIMEOUT_MS / 1000}s, killing process`);
+      child.kill();
+    }, TIMEOUT_MS);
+
+    ({ code } = await child.status);
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+    if (xvfb) {
+      xvfb.child.kill("SIGTERM");
+      await xvfb.child.status.catch(() => {});
+    }
+  }
 
   if (toStdout) {
     if (code === 0) {

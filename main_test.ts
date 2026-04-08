@@ -2,7 +2,11 @@ import { assertEquals, assertThrows } from "jsr:@std/assert";
 import {
   getNeutralinoBinaryName,
   getNeutralinoLaunchArgs,
+  getMissingXvfbMessage,
+  getXvfbLaunchArgs,
   isStdoutPath,
+  parseDisplayNumber,
+  shouldUseXvfb,
   getStdoutFormat,
 } from "./main.ts";
 
@@ -88,4 +92,47 @@ Deno.test("Neutralino 실행 인자 생성", async (t) => {
       ["--res-mode=directory", "--path=C:/work/resources"],
     );
   });
+});
+
+Deno.test("Xvfb 사용 여부 판별", async (t) => {
+  await t.step("linux에서 DISPLAY가 없으면 Xvfb를 사용한다", () => {
+    assertEquals(shouldUseXvfb("linux", undefined), true);
+    assertEquals(shouldUseXvfb("linux", ""), true);
+  });
+
+  await t.step("linux에서 DISPLAY가 있으면 Xvfb를 사용하지 않는다", () => {
+    assertEquals(shouldUseXvfb("linux", ":0"), false);
+  });
+
+  await t.step("linux가 아니면 Xvfb를 사용하지 않는다", () => {
+    assertEquals(shouldUseXvfb("darwin", undefined), false);
+    assertEquals(shouldUseXvfb("windows", undefined), false);
+  });
+});
+
+Deno.test("Xvfb 실행 인자 생성", () => {
+  assertEquals(
+    getXvfbLaunchArgs(),
+    ["-displayfd", "1", "-screen", "0", "1920x1080x24", "-nolisten", "tcp"],
+  );
+});
+
+Deno.test("Xvfb display 번호 파싱", async (t) => {
+  await t.step("숫자 출력에서 DISPLAY 문자열을 만든다", () => {
+    assertEquals(parseDisplayNumber("99\n"), ":99");
+    assertEquals(parseDisplayNumber("  7  \n"), ":7");
+  });
+
+  await t.step("숫자가 아니면 null을 반환한다", () => {
+    assertEquals(parseDisplayNumber(""), null);
+    assertEquals(parseDisplayNumber("error"), null);
+    assertEquals(parseDisplayNumber(":99"), null);
+  });
+});
+
+Deno.test("Xvfb 미설치 안내 메시지", () => {
+  assertEquals(
+    getMissingXvfbMessage(),
+    "Headless Linux requires Xvfb, but 'Xvfb' was not found in PATH. Install Xvfb or run inside a desktop session.",
+  );
 });
