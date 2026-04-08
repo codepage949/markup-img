@@ -1,6 +1,5 @@
 import { dirname, basename, resolve } from "@std/path";
 
-const NEUTRALINO_VERSION = "6.7.0";
 const XVFB_SCREEN = "1920x1080x24";
 
 export function getNeutralinoBinaryName(os: string, arch: string): string {
@@ -140,42 +139,6 @@ if (import.meta.main) {
   const resourcesDir = toFwdSlash(`${binaryDir}/resources`);
   const binName = getNeutralinoBinaryName(Deno.build.os, Deno.build.arch);
   const neutralinoBin = `${binaryDir}/${binName}`;
-
-  // --path=<resourcesDir> 사용 시 neutralinojs의 appPath가 resourcesDir로 설정되어
-  // HTTP 서버가 resourcesDir에서 파일을 서빙함.
-  // 이에 따라 config도 resourcesDir에 위치해야 함.
-  const config = {
-    applicationId: "js.neutralino.markup-img",
-    version: "1.0.0",
-    defaultMode: "window",
-    port: 0,
-    url: "/index.html",
-    enableServer: true,
-    enableNativeAPI: true,
-    tokenSecurity: "one-time",
-    logging: { enabled: false },
-    nativeAllowList: ["app.*", "os.*", "filesystem.*", "server.*"],
-    modes: {
-      window: {
-        title: "markup-img",
-        width: 1920,
-        height: 1080,
-        hidden: true,
-      },
-    },
-    cli: {
-      binaryName: "neutralino",
-      resourcesPath: "/resources/",
-      clientLibrary: "/resources/neutralino.js",
-      binaryVersion: NEUTRALINO_VERSION,
-      clientVersion: NEUTRALINO_VERSION,
-    },
-  };
-
-  await Deno.writeTextFile(
-    `${resourcesDir}/neutralino.config.json`,
-    JSON.stringify(config, null, 2),
-  );
 
   const TIMEOUT_MS = 60_000;
   const env = Deno.env.toObject();
