@@ -1,9 +1,9 @@
 # 📸 markup-img
 
 > **HTML을 이미지로 변환하는 CLI 도구**  
-> Deno와 Neutralinojs를 활용한 초경량·고성능 렌더링 솔루션.
+> Rust와 Neutralinojs를 활용한 초경량·고성능 렌더링 솔루션.
 
-![Deno](https://img.shields.io/badge/Deno-000000?style=flat-square&logo=deno&logoColor=white)
+![Rust](https://img.shields.io/badge/Rust-000000?style=flat-square&logo=rust&logoColor=white)
 ![Neutralinojs](https://img.shields.io/badge/Neutralinojs-e43937?style=flat-square&logo=neutralinojs&logoColor=white)
 ![SnapDOM](https://img.shields.io/badge/SnapDOM-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey?style=flat-square)
@@ -16,7 +16,7 @@
 - 🎯 **정밀 렌더링**: `SnapDOM` (SVG foreignObject) 기반의 정확한 DOM 캡처
 - 🌍 **멀티 플랫폼**: Windows, macOS, Linux 지원
 - 🛠️ **파이프라인 친화적**: `stdout` 출력을 지원하여 다른 CLI 도구와 연동 가능
-- 📦 **단일 바이너리**: 복잡한 의존성 설치 없이 즉시 실행
+- 📦 **작은 배포 패키지**: 실행 파일과 최소 리소스만 포함
 - 🖥️ **헤드리스 Linux 지원**: `DISPLAY`가 없으면 `Xvfb`를 자동으로 사용
 
 ---
@@ -78,14 +78,15 @@ cat page.html | ./markup-img - -
 
 | 기술 | 역할 |
 | :--- | :--- |
-| **Deno** | CLI 런타임 및 바이너리 배포 |
+| **Rust** | CLI 런타임 및 바이너리 배포 |
 | **Neutralinojs** | OS 네이티브 웹뷰 기반 렌더링 엔진 |
 | **SnapDOM** | 고정밀 DOM to Canvas 변환 라이브러리 |
 
 ### 프로젝트 구조
 ```text
 /
-├── main.ts            # Deno CLI 진입점
+├── src/main.rs        # Rust CLI 진입점
+├── src/bin/download-neutralino.rs
 ├── resources/         # 렌더러 리소스
 │   ├── index.html     # 캡처 로직 (WebView)
 │   └── snapdom.mjs    # SnapDOM 엔진
@@ -96,20 +97,20 @@ cat page.html | ./markup-img - -
 
 ## 🧑‍💻 개발 및 빌드
 
-Deno가 설치되어 있어야 합니다.
+Rust 툴체인(`cargo`)이 설치되어 있어야 합니다.
 
 ```bash
 # Neutralinojs 런타임 다운로드
-deno task download
+cargo run --bin download-neutralino
 
 # 개발 모드 실행
-deno task start <html-path> [output-path]
+cargo run --bin markup-img -- <html-path> [output-path]
 
 # 유닛 테스트 실행
-deno task test
+cargo test
 
-# 실행 파일 컴파일
-deno task compile
+# 릴리즈 빌드
+cargo build --release
 ```
 
 Linux 헤드리스 환경에서는 시스템에 `Xvfb`가 설치되어 있으면 자동으로 기동합니다.
