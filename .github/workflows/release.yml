@@ -12,8 +12,71 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Prepare release version
+    runs-on: ubuntu-latest
+    outputs:
+      release_sha: ${{ steps.release_sha.outputs.value }}
+      cargo_version: ${{ steps.cargo_version.outputs.value }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Ensure tag does not already exist
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          if git rev-parse "refs/tags/$version" >/dev/null 2>&1; then
+            echo "Tag already exists: $version" >&2
+            exit 1
+          fi
+
+      - name: Update Cargo version
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo run --bin prepare-release-version -- "${{ inputs.version }}"
+          cargo generate-lockfile
+
+      - name: Read Cargo version
+        id: cargo_version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Commit release version update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- Cargo.toml Cargo.lock; then
+            echo "Cargo version is already up to date"
+            exit 0
+          fi
+          git add Cargo.toml Cargo.lock
+          git commit -m "chore: 릴리즈 버전 ${{ steps.cargo_version.outputs.value }} 반영"
+          git push origin HEAD
+
+      - name: Capture release SHA
+        id: release_sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.label }}
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +121,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.prepare.outputs.release_sha }}
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -121,29 +186,22 @@ jobs:
   release:
     name: Create GitHub release
     runs-on: ubuntu-latest
-    needs: build
+    needs:
+      - prepare
+      - build
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ needs.prepare.outputs.release_sha }}
 
       - name: Download archives
         uses: actions/download-artifact@v4
         with:
           path: release-assets
           merge-multiple: true
-
-      - name: Ensure tag does not already exist
-        shell: bash
-        run: |
-          set -euo pipefail
-          version="${{ inputs.version }}"
-          if git rev-parse "refs/tags/$version" >/dev/null 2>&1; then
-            echo "Tag already exists: $version" >&2
-            exit 1
-          fi
 
       - name: Generate release notes
         shell: bash
@@ -171,7 +229,7 @@ jobs:
         run: |
           set -euo pipefail
           version="${{ inputs.version }}"
-          git tag "$version"
+          git tag "$version" "${{ needs.prepare.outputs.release_sha }}"
           git push origin "$version"
 
       - name: Create GitHub release

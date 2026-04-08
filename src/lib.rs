@@ -147,6 +147,34 @@ pub fn is_windows_executable(path: &Path) -> bool {
     path.extension() == Some(OsStr::new("exe"))
 }
 
+pub fn parse_cargo_version_from_tag(tag: &str) -> Result<&str, String> {
+    let version = tag
+        .strip_prefix('v')
+        .ok_or_else(|| format!("Release tag must start with 'v': {tag}"))?;
+
+    if version.is_empty() {
+        return Err("Release tag must include a version after 'v'".to_string());
+    }
+
+    let parts = version.split('.').collect::<Vec<_>>();
+    if parts.len() != 3 || parts.iter().any(|part| part.is_empty()) {
+        return Err(format!(
+            "Release tag must be in 'vMAJOR.MINOR.PATCH' format: {tag}"
+        ));
+    }
+
+    if parts
+        .iter()
+        .any(|part| !part.chars().all(|ch| ch.is_ascii_digit()))
+    {
+        return Err(format!(
+            "Release tag must contain only numeric MAJOR.MINOR.PATCH parts: {tag}"
+        ));
+    }
+
+    Ok(version)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +319,19 @@ mod tests {
             resolve_output_path(&base, "/tmp/result.png"),
             PathBuf::from("/tmp/result.png")
         );
+    }
+
+    #[test]
+    fn 릴리즈_태그에서_cargo_버전_추출() {
+        assert_eq!(parse_cargo_version_from_tag("v1.2.3").unwrap(), "1.2.3");
+        assert_eq!(parse_cargo_version_from_tag("v0.0.1").unwrap(), "0.0.1");
+    }
+
+    #[test]
+    fn 잘못된_릴리즈_태그는_오류를_반환() {
+        assert!(parse_cargo_version_from_tag("1.2.3").is_err());
+        assert!(parse_cargo_version_from_tag("v1.2").is_err());
+        assert!(parse_cargo_version_from_tag("v1.2.x").is_err());
+        assert!(parse_cargo_version_from_tag("v").is_err());
     }
 }
