@@ -1,6 +1,6 @@
 # 📸 markup-img
 
-> **HTML을 가장 쉽고 빠르게 이미지로 변환하는 CLI 도구**  
+> **HTML을 이미지로 변환하는 CLI 도구**  
 > Deno와 Neutralinojs를 활용한 초경량·고성능 렌더링 솔루션.
 
 ![Deno](https://img.shields.io/badge/Deno-000000?style=flat-square&logo=deno&logoColor=white)
@@ -109,7 +109,3 @@ deno task compile
 Linux 헤드리스 환경에서는 시스템에 `Xvfb`가 설치되어 있으면 자동으로 기동합니다.
 
 `resources/neutralino.config.json`은 정적 파일로 저장소에 포함되어 관리합니다.
-
-## 릴리즈
-
-GitHub Actions의 `Release` 워크플로를 수동 실행해 버전 태그, 타깃별 zip 산출물, GitHub 릴리즈를 생성할 수 있습니다.
