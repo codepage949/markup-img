@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -104,14 +104,14 @@ jobs:
             use_cross: false
           - target: x86_64-apple-darwin
             label: macos-x64
-            runner: macos-13
+            runner: macos-15-intel
             output_name: markup-img
             archive_name: markup-img-${{ inputs.version }}-macos-x64.zip
             neutralino_bin: neutralino-mac_x64
             use_cross: false
           - target: aarch64-apple-darwin
             label: macos-arm64
-            runner: macos-14
+            runner: macos-15
             output_name: markup-img
             archive_name: markup-img-${{ inputs.version }}-macos-arm64.zip
             neutralino_bin: neutralino-mac_arm64
@@ -120,7 +120,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.prepare.outputs.release_sha }}
 
@@ -173,11 +173,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cd dist/${{ matrix.label }}
-          zip -r "../${{ matrix.archive_name }}" .
+          python - <<'PY'
+          from pathlib import Path
+          import zipfile
+
+          package_dir = Path("dist") / "${{ matrix.label }}"
+          archive_path = Path("dist") / "${{ matrix.archive_name }}"
+
+          with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+              for path in sorted(package_dir.rglob("*")):
+                  if path.is_file():
+                      zf.write(path, path.relative_to(package_dir))
+          PY
 
       - name: Upload release archive
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.label }}
           path: dist/${{ matrix.archive_name }}
@@ -192,16 +202,18 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ needs.prepare.outputs.release_sha }}
 
       - name: Download archives
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh run download "${{ github.run_id }}" --dir release-assets
 
       - name: Generate release notes
         shell: bash
@@ -238,7 +250,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          assets=(release-assets/*/*.zip)
           gh release create "${{ inputs.version }}" \
-            release-assets/*.zip \
+            "${assets[@]}" \
             --title "${{ inputs.version }}" \
             --notes-file RELEASE_NOTES.md
