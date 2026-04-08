@@ -8,4 +8,5 @@ markup-img
 neutralinojs.log
 neutralino-*
 
+!.github/
 !.gitignore
