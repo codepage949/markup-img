@@ -1,9 +1,12 @@
 import { assertEquals, assertThrows } from "jsr:@std/assert";
 import {
+  getHelpText,
   getNeutralinoBinaryName,
   getNeutralinoLaunchArgs,
   getMissingXvfbMessage,
   getXvfbLaunchArgs,
+  isHelpFlag,
+  isStdinPath,
   isStdoutPath,
   parseDisplayNumber,
   shouldUseXvfb,
@@ -76,6 +79,44 @@ Deno.test("stdout 포맷 감지", async (t) => {
   await t.step("'-.jpeg'는 jpg", () => {
     assertEquals(getStdoutFormat("-.jpeg"), "jpg");
   });
+});
+
+Deno.test("stdin HTML 경로 판별", async (t) => {
+  await t.step("'-'는 stdin HTML 경로", () => {
+    assertEquals(isStdinPath("-"), true);
+  });
+
+  await t.step("일반 파일 경로는 stdin HTML 경로 아님", () => {
+    assertEquals(isStdinPath("test.html"), false);
+    assertEquals(isStdinPath(""), false);
+  });
+});
+
+Deno.test("help 플래그 판별", async (t) => {
+  await t.step("'--help'는 help 플래그", () => {
+    assertEquals(isHelpFlag("--help"), true);
+  });
+
+  await t.step("'-h'는 help 플래그", () => {
+    assertEquals(isHelpFlag("-h"), true);
+  });
+
+  await t.step("그 외 값은 help 플래그 아님", () => {
+    assertEquals(isHelpFlag("-"), false);
+    assertEquals(isHelpFlag("test.html"), false);
+    assertEquals(isHelpFlag(undefined), false);
+  });
+});
+
+Deno.test("help 텍스트 생성", () => {
+  assertEquals(
+    getHelpText().includes("Usage: markup-img <html-path> [output-path]"),
+    true,
+  );
+  assertEquals(
+    getHelpText().includes("cat page.html | markup-img - output.png"),
+    true,
+  );
 });
 
 Deno.test("Neutralino 실행 인자 생성", async (t) => {

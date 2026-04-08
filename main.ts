@@ -23,6 +23,36 @@ export function getStdoutFormat(p: string): "png" | "jpg" {
   return p.endsWith(".jpg") || p.endsWith(".jpeg") ? "jpg" : "png";
 }
 
+export function isStdinPath(p: string): boolean {
+  return p === "-";
+}
+
+export function isHelpFlag(p: string | undefined): boolean {
+  return p === "-h" || p === "--help";
+}
+
+export function getHelpText(): string {
+  return [
+    "Usage: markup-img <html-path> [output-path]",
+    "",
+    "Arguments:",
+    "  <html-path>    HTML file path or '-' to read HTML from stdin",
+    "  [output-path]  Output file path, or '-' / '-.png' / '-.jpg' for stdout",
+    "",
+    "Examples:",
+    "  markup-img page.html",
+    "  markup-img page.html output.png",
+    "  markup-img page.html output.jpg",
+    "  cat page.html | markup-img - output.png",
+    "  markup-img page.html - > output.png",
+    "  cat page.html | markup-img - -",
+    "",
+    "Notes:",
+    "  - If '#markup-img' exists, only that element is captured.",
+    "  - On Linux without DISPLAY, Xvfb is started automatically when available.",
+  ].join("\n");
+}
+
 export function getNeutralinoLaunchArgs(resourcesDir: string): string[] {
   return [
     "--res-mode=directory",
@@ -53,6 +83,32 @@ export function parseDisplayNumber(output: string): string | null {
 
 export function getMissingXvfbMessage(): string {
   return "Headless Linux requires Xvfb, but 'Xvfb' was not found in PATH. Install Xvfb or run inside a desktop session.";
+}
+
+async function createHtmlInputFile(htmlPath: string): Promise<{ path: string; temporary: boolean }> {
+  if (!isStdinPath(htmlPath)) {
+    return { path: resolve(htmlPath), temporary: false };
+  }
+
+  const html = await new Response(Deno.stdin.readable).text();
+  let tempPath: string;
+
+  try {
+    // stdin HTML의 상대 경로가 현재 작업 디렉터리 기준으로 해석되도록 한다.
+    tempPath = await Deno.makeTempFile({
+      dir: Deno.cwd(),
+      prefix: ".markup-img-stdin-",
+      suffix: ".html",
+    });
+  } catch {
+    tempPath = await Deno.makeTempFile({
+      prefix: "markup-img-stdin-",
+      suffix: ".html",
+    });
+  }
+
+  await Deno.writeTextFile(tempPath, html);
+  return { path: tempPath, temporary: true };
 }
 
 async function readXvfbDisplay(stdout: ReadableStream<Uint8Array> | null): Promise<string> {
@@ -117,12 +173,18 @@ if (import.meta.main) {
   const htmlPath = Deno.args[0];
   const outputPath = Deno.args[1] ?? "result.png";
 
+  if (isHelpFlag(htmlPath)) {
+    console.log(getHelpText());
+    Deno.exit(0);
+  }
+
   if (!htmlPath) {
-    console.error("Usage: markup-img <html-path> [output-path]");
+    console.error(getHelpText());
     Deno.exit(1);
   }
 
-  const absHtmlPath = resolve(htmlPath);
+  const htmlInput = await createHtmlInputFile(htmlPath);
+  const absHtmlPath = htmlInput.path;
   const toStdout = isStdoutPath(outputPath);
   const actualOutputPath = toStdout
     ? await Deno.makeTempFile({ suffix: `.${getStdoutFormat(outputPath)}` })
@@ -178,6 +240,9 @@ if (import.meta.main) {
     if (xvfb) {
       xvfb.child.kill("SIGTERM");
       await xvfb.child.status.catch(() => {});
+    }
+    if (htmlInput.temporary) {
+      await Deno.remove(htmlInput.path).catch(() => {});
     }
   }
 

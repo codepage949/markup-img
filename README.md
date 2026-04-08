@@ -36,6 +36,9 @@
 
 # JPEG 포맷 저장
 ./markup-img example.html my-image.jpg
+
+# stdin으로 HTML 입력
+cat example.html | ./markup-img - output.png
 ```
 
 ### 💡 꿀팁: Stdout 출력 및 파이프 활용
@@ -46,6 +49,9 @@
 
 # ImageMagick 등을 활용한 즉시 변환
 ./markup-img page.html -.jpg | convert - result.webp
+
+# stdin HTML + stdout 이미지 조합
+cat page.html | ./markup-img - -
 ```
 
 ---
@@ -109,3 +115,5 @@ deno task compile
 Linux 헤드리스 환경에서는 시스템에 `Xvfb`가 설치되어 있으면 자동으로 기동합니다.
 
 `resources/neutralino.config.json`은 정적 파일로 저장소에 포함되어 관리합니다.
+
+CLI 사용법은 `markup-img --help`로 터미널에서 확인할 수 있습니다.
